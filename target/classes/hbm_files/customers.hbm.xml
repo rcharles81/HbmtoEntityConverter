@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC
+        "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+        "http://www.hibernate.org/dtd/hibernate-mapping-3.0.dtd">
+
+<hibernate-mapping package="com.example.domain">
+
+    <class name="Customer" table="CUSTOMERS">
+        <id name="id" type="long" column="CUSTOMER_ID">
+            <generator class="sequence">
+                <param name="sequence">CUSTOMER_SEQ</param>
+            </generator>
+        </id>
+        
+        <natural-id>
+            <property name="emailAddress" type="string" column="EMAIL" not-null="true" length="255" unique="true"/>
+        </natural-id>
+        
+        <property name="firstName" type="string" column="FIRST_NAME" not-null="true" length="50"/>
+        <property name="lastName" type="string" column="LAST_NAME" not-null="true" length="50"/>
+        <property name="dateOfBirth" type="date" column="DATE_OF_BIRTH"/>
+        <property name="createdAt" type="timestamp" column="CREATED_AT" not-null="true"/>
+        <property name="lastUpdated" type="timestamp" column="LAST_UPDATED"/>
+        <property name="accountStatus" column="ACCOUNT_STATUS">
+            <type name="org.hibernate.type.EnumType">
+                <param name="enumClass">com.example.domain.AccountStatus</param>
+                <param name="useNamed">true</param>
+            </type>
+        </property>
+        
+        <!-- Formula example -->
+        <property name="fullName" formula="CONCAT(FIRST_NAME, ' ', LAST_NAME)" type="string"/>
+        
+        <!-- Component mapping (embedded object) -->
+        <component name="address" class="Address">
+            <property name="street" column="STREET" type="string" length="100"/>
+            <property name="city" column="CITY" type="string" length="50"/>
+            <property name="state" column="STATE" type="string" length="2"/>
+            <property name="zipCode" column="ZIP_CODE" type="string" length="10"/>
+            <property name="country" column="COUNTRY" type="string" length="50"/>
+        </component>
+        
+        <!-- One-to-many relationship -->
+        <set name="orders" inverse="true" cascade="all-delete-orphan" fetch="select" lazy="true">
+            <key column="CUSTOMER_ID" not-null="true"/>
+            <one-to-many class="Order"/>
+        </set>
+        
+        <!-- Many-to-many relationship -->
+        <bag name="categories" table="CUSTOMER_CATEGORY">
+            <key column="CUSTOMER_ID"/>
+            <many-to-many class="Category" column="CATEGORY_ID"/>
+        </bag>
+        
+        <!-- Discriminator for inheritance -->
+        <discriminator column="CUSTOMER_TYPE" type="string"/>
+        
+        <subclass name="PremiumCustomer" discriminator-value="PREMIUM">
+            <property name="membershipLevel" column="MEMBERSHIP_LEVEL" type="string"/>
+            <property name="loyaltyPoints" column="LOYALTY_POINTS" type="integer"/>
+        </subclass>
+        
+        <subclass name="CorporateCustomer" discriminator-value="CORPORATE">
+            <property name="companyName" column="COMPANY_NAME" type="string"/>
+            <property name="taxId" column="TAX_ID" type="string"/>
+        </subclass>
+        
+        <!-- Filters -->
+        <filter name="activeCustomersOnly" condition="ACCOUNT_STATUS = 'ACTIVE'"/>
+        <filter name="regionalFilter" condition="ADDRESS_STATE = :state"/>
+        
+        <!-- Named Queries -->
+        <query name="findCustomerByEmail">
+            <![CDATA[
+                FROM Customer c
+                WHERE c.emailAddress = :email
+            ]]>
+        </query>
+        
+        <query name="findPremiumCustomersWithMinLoyaltyPoints">
+            <![CDATA[
+                FROM PremiumCustomer pc
+                WHERE pc.loyaltyPoints >= :minPoints
+                ORDER BY pc.loyaltyPoints DESC
+            ]]>
+        </query>
+        
+        <query name="findCustomersWithPendingOrders">
+            <![CDATA[
+                SELECT DISTINCT c
+                FROM Customer c
+                JOIN c.orders o
+                WHERE o.status = 'PENDING'
+                AND o.totalAmount > :minAmount
+                ORDER BY c.lastName, c.firstName
+            ]]>
+        </query>
+        
+        <!-- Native SQL Queries -->
+        <sql-query name="findCustomerWithOrderCounts">
+            <return alias="c" class="Customer"/>
+            <return-scalar column="orderCount" type="integer"/>
+            <![CDATA[
+                SELECT c.*, COUNT(o.ORDER_ID) as orderCount
+                FROM CUSTOMERS c
+                LEFT JOIN ORDERS o ON c.CUSTOMER_ID = o.CUSTOMER_ID
+                WHERE c.ACCOUNT_STATUS = :status
+                GROUP BY c.CUSTOMER_ID, c.EMAIL, c.FIRST_NAME, c.LAST_NAME,
+                         c.DATE_OF_BIRTH, c.CREATED_AT, c.LAST_UPDATED,
+                         c.ACCOUNT_STATUS, c.STREET, c.CITY, c.STATE,
+                         c.ZIP_CODE, c.COUNTRY, c.CUSTOMER_TYPE
+                HAVING COUNT(o.ORDER_ID) > :minOrders
+                ORDER BY orderCount DESC
+            ]]>
+        </sql-query>
+        
+        <sql-query name="findCustomersWithCategoryProducts">
+            <return alias="c" class="Customer"/>
+            <return alias="p" class="Product"/>
+            <![CDATA[
+                SELECT {c.*}, {p.*}
+                FROM CUSTOMERS c
+                JOIN ORDERS o ON c.CUSTOMER_ID = o.CUSTOMER_ID
+                JOIN ORDER_ITEMS oi ON o.ORDER_ID = oi.ORDER_ID
+                JOIN PRODUCTS p ON oi.PRODUCT_ID = p.PRODUCT_ID
+                JOIN PRODUCT_CATEGORY pc ON p.PRODUCT_ID = pc.PRODUCT_ID
+                WHERE pc.CATEGORY_ID = :categoryId
+                AND o.ORDER_DATE BETWEEN :startDate AND :endDate
+            ]]>
+        </sql-query>
+    </class>
+    
+    <class name="Order" table="ORDERS">
+        <id name="id" type="long" column="ORDER_ID">
+            <generator class="sequence">
+                <param name="sequence">ORDER_SEQ</param>
+            </generator>
+        </id>
+        
+        <property name="orderNumber" type="string" column="ORDER_NUMBER" not-null="true" unique="true"/>
+        <property name="orderDate" type="timestamp" column="ORDER_DATE" not-null="true"/>
+        <property name="status" column="STATUS">
+            <type name="org.hibernate.type.EnumType">
+                <param name="enumClass">com.example.domain.OrderStatus</param>
+                <param name="useNamed">true</param>
+            </type>
+        </property>
+        <property name="totalAmount" type="big_decimal" column="TOTAL_AMOUNT" precision="10" scale="2"/>
+        
+        <!-- Many-to-one relationship -->
+        <many-to-one name="customer" class="Customer" column="CUSTOMER_ID" not-null="true" fetch="select"/>
+        
+        <!-- One-to-many relationship with join table -->
+        <list name="items" cascade="all" table="ORDER_ITEMS">
+            <key column="ORDER_ID"/>
+            <list-index column="ITEM_POSITION"/>
+            <composite-element class="OrderItem">
+                <property name="quantity" column="QUANTITY" type="integer"/>
+                <property name="unitPrice" column="UNIT_PRICE" type="big_decimal"/>
+                <many-to-one name="product" class="Product" column="PRODUCT_ID" not-null="true"/>
+            </composite-element>
+        </list>
+        
+        <!-- Named queries specific to orders -->
+        <query name="findOrdersByDateRange">
+            <![CDATA[
+                FROM Order o
+                WHERE o.orderDate BETWEEN :startDate AND :endDate
+                ORDER BY o.orderDate DESC
+            ]]>
+        </query>
+        
+        <sql-query name="findTopSellingProductsByOrder">
+            <return-scalar column="productId" type="long"/>
+            <return-scalar column="productName" type="string"/>
+            <return-scalar column="totalQuantity" type="integer"/>
+            <return-scalar column="totalRevenue" type="big_decimal"/>
+            <![CDATA[
+                SELECT p.PRODUCT_ID as productId, 
+                       p.NAME as productName,
+                       SUM(oi.QUANTITY) as totalQuantity,
+                       SUM(oi.QUANTITY * oi.UNIT_PRICE) as totalRevenue
+                FROM ORDERS o
+                JOIN ORDER_ITEMS oi ON o.ORDER_ID = oi.ORDER_ID
+                JOIN PRODUCTS p ON oi.PRODUCT_ID = p.PRODUCT_ID
+                WHERE o.STATUS = 'COMPLETED'
+                AND o.ORDER_DATE BETWEEN :startDate AND :endDate
+                GROUP BY p.PRODUCT_ID, p.NAME
+                ORDER BY totalRevenue DESC
+                LIMIT :limit
+            ]]>
+        </sql-query>
+    </class>
+    
+    <class name="Product" table="PRODUCTS">
+        <id name="id" type="long" column="PRODUCT_ID">
+            <generator class="sequence">
+                <param name="sequence">PRODUCT_SEQ</param>
+            </generator>
+        </id>
+        
+        <property name="sku" type="string" column="SKU" not-null="true" unique="true"/>
+        <property name="name" type="string" column="NAME" not-null="true"/>
+        <property name="description" type="text" column="DESCRIPTION"/>
+        <property name="price" type="big_decimal" column="PRICE" precision="10" scale="2"/>
+        <property name="stockQuantity" type="integer" column="STOCK_QUANTITY"/>
+        <property name="active" type="boolean" column="IS_ACTIVE"/>
+        
+        <!-- Many-to-many relationship -->
+        <set name="categories" table="PRODUCT_CATEGORY">
+            <key column="PRODUCT_ID"/>
+            <many-to-many class="Category" column="CATEGORY_ID"/>
+        </set>
+    </class>
+    
+    <class name="Category" table="CATEGORIES">
+        <id name="id" type="long" column="CATEGORY_ID">
+            <generator class="sequence">
+                <param name="sequence">CATEGORY_SEQ</param>
+            </generator>
+        </id>
+        
+        <property name="name" type="string" column="NAME" not-null="true" unique="true"/>
+        <property name="description" type="string" column="DESCRIPTION"/>
+        
+        <!-- Self-referencing relationship for category hierarchy -->
+        <many-to-one name="parent" class="Category" column="PARENT_ID"/>
+        <set name="children" inverse="true">
+            <key column="PARENT_ID"/>
+            <one-to-many class="Category"/>
+        </set>
+    </class>
+    
+    <!-- Filter definitions -->
+    <filter-def name="activeCustomersOnly"/>
+    <filter-def name="regionalFilter">
+        <filter-param name="state" type="string"/>
+    </filter-def>
+    
+</hibernate-mapping>

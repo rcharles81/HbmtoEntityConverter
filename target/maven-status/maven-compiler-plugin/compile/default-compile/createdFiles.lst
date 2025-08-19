@@ -1,0 +1,11 @@
+com\convert\hbm\entity\EntityGenerator.class
+com\convert\hbm\entity\QueryMetadata.class
+com\convert\hbm\entity\FilterMetadata.class
+com\convert\hbm\entity\IdMetadata.class
+com\convert\hbm\entity\App.class
+com\convert\hbm\entity\EntityMetadata.class
+com\convert\hbm\entity\HbmParser.class
+com\convert\hbm\entity\FilterMetadata$FilterParameter.class
+com\convert\hbm\entity\SqlQueryMetadata$ResultMapping.class
+com\convert\hbm\entity\PropertyMetadata.class
+com\convert\hbm\entity\SqlQueryMetadata.class
