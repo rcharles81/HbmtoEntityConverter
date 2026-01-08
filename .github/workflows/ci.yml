@@ -1,7 +1,5 @@
 name: First Github Action project
 on: [push, pull_request]  
-branches:
-  - main
 jobs:
   build:
     runs-on: ubuntu-latest
