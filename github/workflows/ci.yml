@@ -1,0 +1,15 @@
+name: First Github Action project
+
+on:
+  push:
+    branches:
+      -main:
+Jobs:
+  Hello:
+    Runs-on:
+       ubuntu-latest
+    Steps:
+      - name: First Step
+        run: echo "HBM to Entity Converter"
+      - name: Second Step
+        run: echo "Converting HBM files to Entity classes"
